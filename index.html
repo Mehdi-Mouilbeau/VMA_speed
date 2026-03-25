@@ -383,8 +383,87 @@
       });
     }
 
-    // ─── Temporary stub — replaced fully in Task 4 ───────────────────────────────
-    function update() {}
+    // ─── Update (validation + results) ──────────────────────────────────────────
+
+    function update() {
+      const nameEl  = document.getElementById('athlete-name');
+      const vmaEl   = document.getElementById('athlete-vma');
+      const nameErr = document.getElementById('err-name');
+      const vmaErr  = document.getElementById('err-vma');
+
+      // Validate athlete fields
+      const nameErrMsg = validateName(nameEl.value);
+      const vmaErrMsg  = validateInt(vmaEl.value, RULES.vma);
+      nameErr.textContent = nameErrMsg || '';
+      vmaErr.textContent  = vmaErrMsg  || '';
+      nameEl.classList.toggle('invalid', !!nameErrMsg);
+      vmaEl.classList.toggle('invalid', !!vmaErrMsg);
+
+      // Validate each bloc and collect data
+      let allValid = !nameErrMsg && !vmaErrMsg && blocs.length > 0;
+      const blocData = [];
+
+      document.querySelectorAll('.bloc').forEach(el => {
+        const repsIn  = el.querySelector('.b-reps');
+        const distIn  = el.querySelector('.b-dist');
+        const pctIn   = el.querySelector('.b-pct');
+        const recupIn = el.querySelector('.b-recup');
+
+        const repsErr  = validateInt(repsIn.value,  RULES.reps);
+        const distErr  = validateInt(distIn.value,  RULES.dist);
+        const pctErr   = validateInt(pctIn.value,   RULES.pct);
+        const recupErr = validateInt(recupIn.value, RULES.recup);
+
+        el.querySelector('.b-err-reps').textContent  = repsErr  || '';
+        el.querySelector('.b-err-dist').textContent  = distErr  || '';
+        el.querySelector('.b-err-pct').textContent   = pctErr   || '';
+        el.querySelector('.b-err-recup').textContent = recupErr || '';
+
+        repsIn.classList.toggle('invalid',  !!repsErr);
+        distIn.classList.toggle('invalid',  !!distErr);
+        pctIn.classList.toggle('invalid',   !!pctErr);
+        recupIn.classList.toggle('invalid', !!recupErr);
+
+        const blocValid = !repsErr && !distErr && !pctErr && !recupErr;
+        if (!blocValid) allValid = false;
+
+        if (blocValid) {
+          blocData.push({
+            reps:  parseInt(repsIn.value, 10),
+            dist:  parseInt(distIn.value, 10),
+            pct:   parseInt(pctIn.value, 10),
+            recup: parseInt(recupIn.value, 10),
+          });
+        }
+      });
+
+      // Render results
+      const resultsEl = document.getElementById('results');
+
+      if (!allValid || blocData.length !== blocs.length) {
+        resultsEl.innerHTML = '<p style="color:#9ca3af;font-size:.88rem;text-align:center;padding:8px 0">Remplissez les champs pour voir les résultats</p>';
+        document.getElementById('btn-fit').disabled = true;
+        document.getElementById('btn-tcx').disabled = true;
+        return;
+      }
+
+      const vma = parseInt(vmaEl.value, 10);
+      let html = '';
+      blocData.forEach((b, i) => {
+        const { timeDisplay, paceDisplay } = calcBlock(vma, b.pct, b.dist);
+        const recupDisplay = b.recup > 0 ? b.recup + ':00' : 'aucune';
+        html += `
+          <div class="result-bloc">
+            <div class="result-title">Bloc ${i + 1} — ${b.reps} × ${b.dist}m @${b.pct}% VMA</div>
+            <div class="result-line">→ Allure : <strong>${paceDisplay}</strong> | Temps : <strong>${timeDisplay}</strong></div>
+            <div class="result-line">→ Récupération : <strong>${recupDisplay}</strong></div>
+          </div>
+        `;
+      });
+      resultsEl.innerHTML = html;
+      document.getElementById('btn-fit').disabled = false;
+      document.getElementById('btn-tcx').disabled = false;
+    }
 
     // ─── Init ────────────────────────────────────────────────────────────────────
 
