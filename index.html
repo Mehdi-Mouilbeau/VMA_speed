@@ -223,7 +223,57 @@
   </div>
 
   <script>
-    // JS will go here in subsequent tasks
+    // ─── Calculation ────────────────────────────────────────────────────────────
+
+    /**
+     * Format raw seconds into "M:SS" or "MM:SS".
+     * Uses Math.round first to avoid floating-point drift and ":60" bug.
+     */
+    function formatTime(rawSeconds) {
+      const total = Math.round(rawSeconds);
+      const m = Math.floor(total / 60);
+      const s = total % 60;
+      return m + ':' + String(s).padStart(2, '0');
+    }
+
+    /**
+     * Calculate target time (seconds) and pace (seconds/km) for a given block.
+     * @param {number} vma      - VMA in km/h
+     * @param {number} pct      - percentage of VMA (e.g. 90 for 90%)
+     * @param {number} distance - distance in meters
+     * @returns {{ timeS: number, paceS: number, timeDisplay: string, paceDisplay: string }}
+     */
+    function calcBlock(vma, pct, distance) {
+      const speedMs = vma * (pct / 100) / 3.6;        // m/s
+      const timeS   = distance / speedMs;              // seconds
+      const paceS   = (timeS / distance) * 1000;       // seconds per km
+      return {
+        timeS,
+        paceS,
+        timeDisplay: formatTime(timeS),
+        paceDisplay: formatTime(paceS) + '/km',
+      };
+    }
+
+    /**
+     * Build slug for filename from athlete name.
+     * "Méhdi Traoré" → "mehdi-traore"
+     */
+    function slugify(name) {
+      return name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .toLowerCase();
+    }
+
+    /**
+     * Return today's date as YYYY-MM-DD.
+     */
+    function todayISO() {
+      return new Date().toISOString().slice(0, 10);
+    }
   </script>
 </body>
 </html>
