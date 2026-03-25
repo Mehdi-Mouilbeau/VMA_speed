@@ -473,6 +473,156 @@
 
     // Start with one bloc
     addBloc();
+
+  // ─── FIT export ──────────────────────────────────────────────────────────────
+
+  /** CRC-16/IBM (poly 0x8005) used by Garmin FIT. */
+  function crc16(data) {
+    const table = [
+      0x0000, 0xCC01, 0xD801, 0x1400, 0xF001, 0x3C00, 0x2800, 0xE401,
+      0xA001, 0x6C00, 0x7800, 0xB401, 0x5000, 0x9C01, 0x8801, 0x4400,
+    ];
+    let crc = 0;
+    for (const byte of data) {
+      let tmp = table[crc & 0xF];
+      crc = (crc >> 4) & 0x0FFF;
+      crc ^= tmp ^ table[byte & 0xF];
+      tmp = table[crc & 0xF];
+      crc = (crc >> 4) & 0x0FFF;
+      crc ^= tmp ^ table[(byte >> 4) & 0xF];
+    }
+    return crc;
+  }
+
+  /** Write little-endian uint8/16/32 into a DataView at offset. Returns new offset. */
+  function writeU8(dv, off, val)  { dv.setUint8(off, val);               return off + 1; }
+  function writeU16(dv, off, val) { dv.setUint16(off, val, true);        return off + 2; }
+  function writeU32(dv, off, val) { dv.setUint32(off, val, true);        return off + 4; }
+
+  /** Write a null-terminated ASCII string (padded to `len` bytes). */
+  function writeStr(arr, off, str, len) {
+    for (let i = 0; i < len; i++) {
+      arr[off + i] = i < str.length ? str.charCodeAt(i) : 0;
+    }
+    return off + len;
+  }
+
+  /**
+   * Generate a FIT workout binary for Garmin / Polar.
+   * @param {string} athleteName
+   * @param {Array<{reps,dist,pct,recup}>} blocData
+   * @param {number} vma
+   * @returns {Uint8Array}
+   */
+  function generateFIT(athleteName, blocData, vma) {
+    // Count total workout_step messages:
+    // For each bloc: reps active steps + (1 rest step if recup > 0)
+    // + 1 cooldown step at end
+    let numSteps = 1; // cooldown
+    for (const b of blocData) {
+      numSteps += b.reps;
+      if (b.recup > 0) numSteps += 1;
+    }
+
+    const wktName = ('VMA - ' + athleteName).slice(0, 30);
+    const wktNameLen = 16; // fixed string field length in FIT workout message
+
+    // Estimate buffer size generously
+    const bufSize = 14 + 300 + numSteps * 40 + 4;
+    const buf = new ArrayBuffer(bufSize);
+    const dv  = new DataView(buf);
+    const arr = new Uint8Array(buf);
+    let off = 0;
+
+    // ── File header (14 bytes) ──────────────────────────────────────────────
+    off = writeU8(dv, off, 0x0E);            // header size = 14
+    off = writeU8(dv, off, 0x10);            // protocol version 1.0
+    off = writeU16(dv, off, 0x08CC);         // profile version 2252
+    const dataSizeOffset = off;              // placeholder — filled in after
+    off = writeU32(dv, off, 0);
+    arr[off++] = 0x2E; arr[off++] = 0x46; arr[off++] = 0x49; arr[off++] = 0x54; // ".FIT"
+    const headerCRC = crc16(arr.slice(0, 12));
+    off = writeU16(dv, off, headerCRC);
+    const dataStart = off; // 14
+
+    // ── Definition: file_id (local msg 0, global msg 0) ────────────────────
+    arr[off++] = 0x40; // definition record header, local msg 0
+    arr[off++] = 0x00; // reserved
+    arr[off++] = 0x00; // arch = little-endian
+    off = writeU16(dv, off, 0); // global msg 0 = file_id
+    arr[off++] = 3;    // 3 fields
+    arr[off++] = 0; arr[off++] = 1; arr[off++] = 0x00; // type: field 0, size 1, enum
+    arr[off++] = 1; arr[off++] = 2; arr[off++] = 0x84; // manufacturer: field 1, size 2, uint16
+    arr[off++] = 4; arr[off++] = 4; arr[off++] = 0x86; // time_created: field 4, size 4, uint32
+
+    // Data: file_id
+    arr[off++] = 0x00; // data record header, local msg 0
+    arr[off++] = 5;    // type = workout
+    off = writeU16(dv, off, 255); // manufacturer = development
+    const fitEpoch = Math.floor(Date.now() / 1000) - 631065600;
+    off = writeU32(dv, off, fitEpoch);
+
+    // ── Definition: workout (local msg 1, global msg 26) ───────────────────
+    arr[off++] = 0x41; // definition, local msg 1
+    arr[off++] = 0x00;
+    arr[off++] = 0x00; // little-endian
+    off = writeU16(dv, off, 26); // global msg 26 = workout
+    arr[off++] = 3;    // 3 fields
+    arr[off++] = 4; arr[off++] = 1; arr[off++] = 0x00; // sport: field 4, size 1, enum
+    arr[off++] = 6; arr[off++] = 2; arr[off++] = 0x84; // num_valid_steps: field 6, size 2, uint16
+    arr[off++] = 8; arr[off++] = wktNameLen; arr[off++] = 0x07; // wkt_name: field 8, size 16, string
+
+    // Data: workout
+    arr[off++] = 0x01; // local msg 1
+    arr[off++] = 1;    // sport = running
+    off = writeU16(dv, off, numSteps);
+    off = writeStr(arr, off, wktName, wktNameLen);
+
+    // ── Definition: workout_step (local msg 2, global msg 27) ──────────────
+    arr[off++] = 0x42; // definition, local msg 2
+    arr[off++] = 0x00;
+    arr[off++] = 0x00;
+    off = writeU16(dv, off, 27); // global msg 27 = workout_step
+    arr[off++] = 4;    // 4 fields
+    arr[off++] = 5; arr[off++] = 1; arr[off++] = 0x00; // duration_type: field 5, size 1, enum
+    arr[off++] = 6; arr[off++] = 4; arr[off++] = 0x86; // duration_value: field 6, size 4, uint32
+    arr[off++] = 4; arr[off++] = 1; arr[off++] = 0x00; // target_type: field 4, size 1, enum
+    arr[off++] = 0; arr[off++] = 1; arr[off++] = 0x00; // intensity: field 0, size 1, enum
+
+    // ── workout_step data messages ──────────────────────────────────────────
+    function writeStep(durationType, durationValue, intensity) {
+      arr[off++] = 0x02; // local msg 2
+      arr[off++] = durationType;
+      off = writeU32(dv, off, durationValue);
+      arr[off++] = 0;    // target_type = 0 (open)
+      arr[off++] = intensity;
+    }
+
+    for (const b of blocData) {
+      const { timeS } = calcBlock(vma, b.pct, b.dist);
+      const durMs = Math.round(timeS) * 1000;
+      for (let i = 0; i < b.reps; i++) {
+        writeStep(0, durMs, 0); // duration_type=time, intensity=active
+      }
+      if (b.recup > 0) {
+        writeStep(0, b.recup * 60 * 1000, 1); // intensity=rest
+      }
+    }
+    // Cooldown step (open duration)
+    writeStep(2, 0, 2); // duration_type=open, intensity=cooldown
+
+    const dataEnd = off;
+    const dataSize = dataEnd - dataStart;
+
+    // Fill in data size in header
+    dv.setUint32(dataSizeOffset, dataSize, true);
+
+    // ── File footer CRC ─────────────────────────────────────────────────────
+    const fileCRC = crc16(arr.slice(0, dataEnd));
+    off = writeU16(dv, off, fileCRC);
+
+    return arr.slice(0, off);
+  }
   </script>
 </body>
 </html>
