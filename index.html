@@ -623,6 +623,63 @@
 
     return arr.slice(0, off);
   }
+
+// ─── TCX export ──────────────────────────────────────────────────────────────
+
+/**
+ * Generate a TCX workout XML string for Huawei Health.
+ * Recovery is placed ONCE after the entire repeat block (not per repetition).
+ * @param {string} athleteName
+ * @param {Array<{reps,dist,pct,recup}>} blocData
+ * @param {number} vma
+ * @returns {string}
+ */
+function generateTCX(athleteName, blocData, vma) {
+  const workoutName = ('VMA - ' + athleteName).slice(0, 30)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let stepId = 1;
+  let stepsXml = '';
+
+  for (const b of blocData) {
+    const { timeS } = calcBlock(vma, b.pct, b.dist);
+    const durSec = Math.round(timeS);
+
+    // One Repeat_t per bloc, containing only the active Child steps
+    stepsXml += `
+      <Step xsi:type="Repeat_t">
+        <Repetitions>${b.reps}</Repetitions>
+        <Child xsi:type="Step_t">
+          <StepId>${stepId++}</StepId>
+          <Duration xsi:type="Time_t"><Seconds>${durSec}</Seconds></Duration>
+          <Intensity>Active</Intensity>
+          <Target xsi:type="None_t"/>
+        </Child>
+      </Step>`;
+
+    // Recovery is a top-level Step_t AFTER the Repeat_t (runs once, not N times)
+    if (b.recup > 0) {
+      stepsXml += `
+      <Step xsi:type="Step_t">
+        <StepId>${stepId++}</StepId>
+        <Duration xsi:type="Time_t"><Seconds>${b.recup * 60}</Seconds></Duration>
+        <Intensity>Rest</Intensity>
+        <Target xsi:type="None_t"/>
+      </Step>`;
+    }
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase
+  xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2 http://www.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd">
+  <Workouts>
+    <Workout Sport="Running">
+      <Name>${workoutName}</Name>${stepsXml}
+    </Workout>
+  </Workouts>
+</TrainingCenterDatabase>`;
+}
   </script>
 </body>
 </html>
