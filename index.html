@@ -274,6 +274,126 @@
     function todayISO() {
       return new Date().toISOString().slice(0, 10);
     }
+
+    // ─── State ───────────────────────────────────────────────────────────────────
+
+    let blocs = [];   // array of { reps, dist, pct, recup }
+    let blocCounter = 0;
+
+    // ─── Validation helpers ──────────────────────────────────────────────────────
+
+    const RULES = {
+      name:  { min: 1,   max: 30,   msg: 'Entrez votre nom' },
+      vma:   { min: 8,   max: 25,   msg: 'VMA entre 8 et 25 km/h' },
+      reps:  { min: 1,   max: 20,   msg: 'Min 1 répétition' },
+      dist:  { min: 100, max: 5000, msg: 'Distance entre 100 et 5000m' },
+      pct:   { min: 50,  max: 150,  msg: '% entre 50 et 150' },
+      recup: { min: 0,   max: 30,   msg: 'Récup entre 0 et 30 min' },
+    };
+
+    function validateInt(value, rule) {
+      const n = parseInt(value, 10);
+      if (isNaN(n) || n < rule.min || n > rule.max) return rule.msg;
+      return null;
+    }
+
+    function validateName(value) {
+      if (!value || value.trim().length === 0) return RULES.name.msg;
+      if (value.trim().length > RULES.name.max) return RULES.name.msg;
+      return null;
+    }
+
+    // ─── Block DOM ───────────────────────────────────────────────────────────────
+
+    function createBlocHTML(id, index) {
+      return `
+        <div class="bloc" id="bloc-${id}" data-id="${id}">
+          <div class="bloc-header">
+            <span class="bloc-title">Bloc ${index}</span>
+            <button class="btn-remove" data-remove="${id}" title="Supprimer">×</button>
+          </div>
+          <div class="row">
+            <div class="field" style="max-width:70px">
+              <label>Rép.</label>
+              <input type="number" class="b-reps" min="1" max="20" placeholder="3">
+              <span class="error-msg b-err-reps"></span>
+            </div>
+            <div class="field">
+              <label>Distance (m)</label>
+              <input type="number" class="b-dist" min="100" max="5000" placeholder="800">
+              <span class="error-msg b-err-dist"></span>
+            </div>
+            <div class="field" style="max-width:80px">
+              <label>% VMA</label>
+              <input type="number" class="b-pct" min="50" max="150" placeholder="90">
+              <span class="error-msg b-err-pct"></span>
+            </div>
+            <div class="field" style="max-width:90px">
+              <label>Récup (min)</label>
+              <input type="number" class="b-recup" min="0" max="30" placeholder="2">
+              <span class="error-msg b-err-recup"></span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function addBloc() {
+      if (blocs.length >= 10) return;
+      blocCounter++;
+      const id = blocCounter;
+      blocs.push({ id, reps: '', dist: '', pct: '', recup: '' });
+      const container = document.getElementById('blocs-container');
+      const div = document.createElement('div');
+      div.innerHTML = createBlocHTML(id, blocs.length);
+      container.appendChild(div.firstElementChild);
+      rebindBlocListeners();
+      updateAddButton();
+      update();
+    }
+
+    function removeBloc(id) {
+      blocs = blocs.filter(b => b.id !== id);
+      const el = document.getElementById('bloc-' + id);
+      if (el) el.remove();
+      // Re-number visible bloc titles
+      document.querySelectorAll('.bloc').forEach((el, i) => {
+        el.querySelector('.bloc-title').textContent = 'Bloc ' + (i + 1);
+      });
+      updateAddButton();
+      update();
+    }
+
+    function updateAddButton() {
+      const btn = document.getElementById('btn-add-bloc');
+      btn.disabled = blocs.length >= 10;
+      btn.textContent = blocs.length >= 10
+        ? '+ Ajouter un bloc (max 10 atteint)'
+        : '+ Ajouter un bloc';
+    }
+
+    function rebindBlocListeners() {
+      document.querySelectorAll('[data-remove]').forEach(btn => {
+        btn.onclick = () => removeBloc(parseInt(btn.dataset.remove, 10));
+      });
+      document.querySelectorAll('.bloc').forEach(el => {
+        el.querySelectorAll('input').forEach(inp => {
+          inp.oninput = update;
+        });
+      });
+    }
+
+    // ─── Temporary stub — replaced fully in Task 4 ───────────────────────────────
+    function update() {}
+
+    // ─── Init ────────────────────────────────────────────────────────────────────
+
+    document.getElementById('btn-add-bloc').addEventListener('click', addBloc);
+    document.getElementById('athlete-name').addEventListener('input', update);
+    document.getElementById('athlete-vma').addEventListener('input', update);
+
+    // Start with one bloc
+    addBloc();
   </script>
 </body>
 </html>
