@@ -196,6 +196,12 @@
       min-height: 20px;
     }
     #garmin-msg a { color: #1da462; }
+    #garmin-msg-b {
+      font-size: 0.85rem;
+      margin-top: 8px;
+      min-height: 20px;
+    }
+    #garmin-msg-b a { color: #1da462; }
     #no-results {
       color: #9ca3af;
       font-size: 0.88rem;
@@ -774,6 +780,16 @@ function downloadBlob(blob, filename) {
     document.getElementById(id).innerHTML = html;
   }
 
+  // Safe version: shows server error text without innerHTML injection risk.
+  function garminSetErr(id, serverText) {
+    const span = document.createElement('span');
+    span.style.color = '#ef4444';
+    span.textContent = serverText || 'Erreur';
+    const el = document.getElementById(id);
+    el.innerHTML = '';
+    el.appendChild(span);
+  }
+
   async function garminConnect() {
     const email    = document.getElementById('garmin-email').value.trim();
     const password = document.getElementById('garmin-password').value;
@@ -794,7 +810,7 @@ function downloadBlob(blob, filename) {
       });
       const data = await res.json();
       if (!res.ok) {
-        garminSetMsg('garmin-msg', `<span style="color:#ef4444">${data.error || 'Erreur'}</span>`);
+        garminSetErr('garmin-msg', data.error);
         btn.disabled = false;
         btn.textContent = 'Connecter mon compte Garmin';
         return;
@@ -844,7 +860,7 @@ function downloadBlob(blob, filename) {
         return;
       }
       if (!res.ok) {
-        garminSetMsg('garmin-msg-b', `<span style="color:#ef4444">${data.error || 'Erreur'}</span>`);
+        garminSetErr('garmin-msg-b', data.error);
         btn.disabled = false;
         btn.textContent = '↑ Envoyer la séance sur Garmin';
         return;
