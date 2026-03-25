@@ -680,6 +680,48 @@ function generateTCX(athleteName, blocData, vma) {
   </Workouts>
 </TrainingCenterDatabase>`;
 }
+
+// ─── Download helpers ────────────────────────────────────────────────────────
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function getExportData() {
+  const name = document.getElementById('athlete-name').value.trim();
+  const vma  = parseInt(document.getElementById('athlete-vma').value, 10);
+  const blocData = [];
+  document.querySelectorAll('.bloc').forEach(el => {
+    blocData.push({
+      reps:  parseInt(el.querySelector('.b-reps').value, 10),
+      dist:  parseInt(el.querySelector('.b-dist').value, 10),
+      pct:   parseInt(el.querySelector('.b-pct').value, 10),
+      recup: parseInt(el.querySelector('.b-recup').value, 10),
+    });
+  });
+  return { name, vma, blocData };
+}
+
+document.getElementById('btn-fit').addEventListener('click', () => {
+  const { name, vma, blocData } = getExportData();
+  const fit = generateFIT(name, blocData, vma);
+  const blob = new Blob([fit], { type: 'application/octet-stream' });
+  downloadBlob(blob, `vma-${slugify(name)}-${todayISO()}.fit`);
+});
+
+document.getElementById('btn-tcx').addEventListener('click', () => {
+  const { name, vma, blocData } = getExportData();
+  const xml = generateTCX(name, blocData, vma);
+  const blob = new Blob([xml], { type: 'text/xml' });
+  downloadBlob(blob, `vma-${slugify(name)}-${todayISO()}.tcx`);
+});
   </script>
 </body>
 </html>
