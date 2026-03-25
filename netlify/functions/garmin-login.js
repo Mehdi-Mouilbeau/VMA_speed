@@ -91,10 +91,12 @@ export async function handler(event) {
 
     // After redirect chain, the final URL contains ?ticket=ST-...
     const finalUrl = step2.url;
+    const step2Status = step2.status;
+    console.log('[garmin-login] step2 finalUrl:', finalUrl, 'status:', step2Status);
     const ticketMatch = finalUrl.match(/[?&]ticket=(ST-[^&]+)/);
     if (!ticketMatch) {
       // Garmin returns 200 with error page when credentials are wrong
-      return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'Identifiants incorrects' }) };
+      return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'Identifiants incorrects', debug_url: finalUrl }) };
     }
     const ticket = ticketMatch[1];
 
