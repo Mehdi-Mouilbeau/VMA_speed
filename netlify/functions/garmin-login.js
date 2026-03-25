@@ -59,15 +59,11 @@ export async function handler(event) {
       },
     });
     const html1 = await step1.text();
-    console.log('[garmin-login] step1 status:', step1.status, 'html snippet:', html1.slice(0, 300));
     const csrfMatch = html1.match(/name="_csrf"\s+value="([^"]+)"/);
     if (!csrfMatch) {
-      return { statusCode: 502, headers: CORS, body: JSON.stringify({ error: 'Erreur Garmin, réessayez', debug: 'no csrf', html_snippet: html1.slice(0, 300) }) };
+      return { statusCode: 502, headers: CORS, body: JSON.stringify({ error: 'Erreur Garmin, réessayez' }) };
     }
     const csrf = csrfMatch[1];
-    console.log('[garmin-login] csrf found:', csrf.slice(0, 10) + '...');
-    const cookiesAfterStep1 = await jar.getCookies('https://sso.garmin.com/');
-    console.log('[garmin-login] cookies after step1:', cookiesAfterStep1.map(c => c.key));
 
     // ── Step 2: POST credentials — follow redirect chain, extract ST-... ticket ──
     const body2 = new URLSearchParams({
@@ -95,12 +91,9 @@ export async function handler(event) {
 
     // After redirect chain, the final URL contains ?ticket=ST-...
     const finalUrl = step2.url;
-    const step2Status = step2.status;
-    const step2Html = await step2.text();
-    console.log('[garmin-login] step2 finalUrl:', finalUrl, 'status:', step2Status, 'html snippet:', step2Html.slice(0, 300));
     const ticketMatch = finalUrl.match(/[?&]ticket=(ST-[^&]+)/);
     if (!ticketMatch) {
-      return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'Identifiants incorrects', debug_url: finalUrl, debug_html: step2Html.slice(0, 500) }) };
+      return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'Identifiants incorrects' }) };
     }
     const ticket = ticketMatch[1];
 
