@@ -160,6 +160,42 @@
     .btn-export:disabled { opacity: 0.35; cursor: not-allowed; }
     .btn-fit  { background: #6366f1; color: #fff; }
     .btn-tcx  { background: #10b981; color: #fff; }
+    /* Garmin card */
+    .btn-garmin {
+      background: #1da462;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 18px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 8px;
+    }
+    .btn-garmin:active { transform: scale(0.98); }
+    .btn-garmin:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-garmin-secondary {
+      background: transparent;
+      color: #6b7280;
+      border: none;
+      font-size: 0.82rem;
+      cursor: pointer;
+      margin-top: 6px;
+      text-decoration: underline;
+    }
+    .garmin-status {
+      font-size: 0.9rem;
+      color: #1da462;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    #garmin-msg {
+      font-size: 0.85rem;
+      margin-top: 8px;
+      min-height: 20px;
+    }
+    #garmin-msg a { color: #1da462; }
     #no-results {
       color: #9ca3af;
       font-size: 0.88rem;
@@ -208,12 +244,44 @@
       </div>
     </div>
 
+    <!-- Garmin auto-send -->
+    <div class="card" id="garmin-card">
+      <h2>Envoyer sur Garmin</h2>
+
+      <!-- State A: not connected -->
+      <div id="garmin-state-a">
+        <div class="field" style="margin-bottom:10px">
+          <label for="garmin-email">Email</label>
+          <input type="text" id="garmin-email" placeholder="user@example.com">
+        </div>
+        <div class="field" style="margin-bottom:10px">
+          <label for="garmin-password">Mot de passe</label>
+          <input type="password" id="garmin-password" placeholder="••••••••">
+        </div>
+        <button class="btn-garmin" id="btn-garmin-connect" onclick="garminConnect()">
+          Connecter mon compte Garmin
+        </button>
+        <div id="garmin-msg"></div>
+      </div>
+
+      <!-- State B: connected -->
+      <div id="garmin-state-b" style="display:none">
+        <div class="garmin-status" id="garmin-connected-label"></div>
+        <button class="btn-garmin" id="btn-garmin-send" onclick="garminSend()">
+          ↑ Envoyer la séance sur Garmin
+        </button>
+        <br>
+        <button class="btn-garmin-secondary" onclick="garminDisconnect()">Se déconnecter</button>
+        <div id="garmin-msg-b"></div>
+      </div>
+    </div>
+
     <!-- Export -->
     <div class="card">
       <h2>Export montre</h2>
       <div class="export-btns">
         <button class="btn-export btn-fit" id="btn-fit" disabled>
-          ↓ Télécharger .fit (Garmin / Polar)
+          ↓ Télécharger .fit (Polar)
         </button>
         <button class="btn-export btn-tcx" id="btn-tcx" disabled>
           ↓ Télécharger .tcx (Huawei)
@@ -473,6 +541,7 @@
 
     // Start with one bloc
     addBloc();
+    initGarminUI();
 
   // ─── FIT export ──────────────────────────────────────────────────────────────
 
@@ -693,6 +762,127 @@ function downloadBlob(blob, filename) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+  // ─── Garmin Connect auto-send ─────────────────────────────────────────────
+
+  function garminShowState(state) {
+    document.getElementById('garmin-state-a').style.display = state === 'a' ? '' : 'none';
+    document.getElementById('garmin-state-b').style.display = state === 'b' ? '' : 'none';
+  }
+
+  function garminSetMsg(id, html) {
+    document.getElementById(id).innerHTML = html;
+  }
+
+  async function garminConnect() {
+    const email    = document.getElementById('garmin-email').value.trim();
+    const password = document.getElementById('garmin-password').value;
+    if (!email || !password) {
+      garminSetMsg('garmin-msg', '<span style="color:#ef4444">Entrez votre email et mot de passe</span>');
+      return;
+    }
+    const btn = document.getElementById('btn-garmin-connect');
+    btn.disabled = true;
+    btn.textContent = 'Connexion…';
+    garminSetMsg('garmin-msg', '');
+
+    try {
+      const res = await fetch('/.netlify/functions/garmin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        garminSetMsg('garmin-msg', `<span style="color:#ef4444">${data.error || 'Erreur'}</span>`);
+        btn.disabled = false;
+        btn.textContent = 'Connecter mon compte Garmin';
+        return;
+      }
+      localStorage.setItem('garmin_session_cookies', data.sessionCookies);
+      localStorage.setItem('garmin_expires_at', String(data.expiresAt));
+      localStorage.setItem('garmin_email', email);
+      document.getElementById('garmin-connected-label').textContent = `Connecté (${email})`;
+      garminShowState('b');
+    } catch {
+      garminSetMsg('garmin-msg', '<span style="color:#ef4444">Erreur réseau, réessayez</span>');
+      btn.disabled = false;
+      btn.textContent = 'Connecter mon compte Garmin';
+    }
+  }
+
+  async function garminSend() {
+    const sessionCookies = localStorage.getItem('garmin_session_cookies');
+    const expiresAt      = parseInt(localStorage.getItem('garmin_expires_at') || '0', 10);
+    if (!sessionCookies || Date.now() >= expiresAt) {
+      garminDisconnect();
+      return;
+    }
+
+    const { name, vma, blocData } = getExportData();
+    const workoutName = ('VMA - ' + name).slice(0, 30);
+    const blocs = blocData.map(b => {
+      const { timeS } = calcBlock(vma, b.pct, b.dist);
+      return { ...b, durSec: Math.round(timeS) };
+    });
+
+    const btn = document.getElementById('btn-garmin-send');
+    btn.disabled = true;
+    btn.textContent = 'Envoi…';
+    garminSetMsg('garmin-msg-b', '');
+
+    try {
+      const res = await fetch('/.netlify/functions/garmin-workout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionCookies, workoutName, blocs }),
+      });
+      const data = await res.json();
+      if (res.status === 401) {
+        garminDisconnect();
+        garminSetMsg('garmin-msg', '<span style="color:#ef4444">Session expirée, reconnectez-vous</span>');
+        return;
+      }
+      if (!res.ok) {
+        garminSetMsg('garmin-msg-b', `<span style="color:#ef4444">${data.error || 'Erreur'}</span>`);
+        btn.disabled = false;
+        btn.textContent = '↑ Envoyer la séance sur Garmin';
+        return;
+      }
+      const link = `https://connect.garmin.com/modern/workout/${data.workoutId}`;
+      garminSetMsg('garmin-msg-b',
+        `Séance envoyée ! <a href="${link}" target="_blank" rel="noopener">Ouvrir dans Garmin Connect →</a>`
+      );
+    } catch {
+      garminSetMsg('garmin-msg-b', '<span style="color:#ef4444">Erreur réseau, réessayez</span>');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '↑ Envoyer la séance sur Garmin';
+    }
+  }
+
+  function garminDisconnect() {
+    localStorage.removeItem('garmin_session_cookies');
+    localStorage.removeItem('garmin_expires_at');
+    localStorage.removeItem('garmin_email');
+    document.getElementById('garmin-email').value = '';
+    document.getElementById('garmin-password').value = '';
+    garminShowState('a');
+  }
+
+  function initGarminUI() {
+    const expiresAt = parseInt(localStorage.getItem('garmin_expires_at') || '0', 10);
+    if (expiresAt && Date.now() < expiresAt) {
+      const email = localStorage.getItem('garmin_email') || '';
+      document.getElementById('garmin-connected-label').textContent = `Connecté (${email})`;
+      garminShowState('b');
+    } else {
+      localStorage.removeItem('garmin_session_cookies');
+      localStorage.removeItem('garmin_expires_at');
+      localStorage.removeItem('garmin_email');
+      garminShowState('a');
+    }
+  }
 
 function getExportData() {
   const name = document.getElementById('athlete-name').value.trim();
