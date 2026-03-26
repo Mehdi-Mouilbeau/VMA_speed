@@ -119,8 +119,9 @@ export async function handler(event) {
 
     // Check page title = "Success"
     const titleMatch = html2.match(/<title>([^<]+)<\/title>/);
+    const pageTitle = titleMatch ? titleMatch[1].trim() : '(no title)';
     if (!titleMatch || !titleMatch[1].includes('Success')) {
-      return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'Identifiants incorrects' }) };
+      return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'Identifiants incorrects', debug_title: pageTitle, debug_html: html2.slice(0, 600) }) };
     }
 
     // Extract ticket from HTML body (garth pattern: embed?ticket=...)
