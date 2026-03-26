@@ -1,6 +1,6 @@
 // netlify/functions/garmin-workout.js
 // Creates a structured workout on Garmin Connect.
-// Input: { sessionCookies, workoutName, blocs: [{reps, dist, pct, recup, durSec}] }
+// Input: { accessToken, workoutName, blocs: [{reps, dist, pct, recup, durSec}] }
 // Output: { workoutId, workoutName } or { error }
 
 import fetch from 'node-fetch';
@@ -19,10 +19,10 @@ export async function handler(event) {
     return { statusCode: 405, headers: CORS, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  let sessionCookies, workoutName, blocs;
+  let accessToken, workoutName, blocs;
   try {
-    ({ sessionCookies, workoutName, blocs } = JSON.parse(event.body));
-    if (!sessionCookies || !workoutName || !Array.isArray(blocs) || blocs.length === 0) {
+    ({ accessToken, workoutName, blocs } = JSON.parse(event.body));
+    if (!accessToken || !workoutName || !Array.isArray(blocs) || blocs.length === 0) {
       throw new Error('missing');
     }
   } catch {
@@ -88,16 +88,13 @@ export async function handler(event) {
   };
 
   try {
-    const res = await fetch('https://connect.garmin.com/workout-service/workout', {
+    const res = await fetch('https://connectapi.garmin.com/workout-service/workout', {
       method: 'POST',
       headers: {
-        'Cookie': sessionCookies,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
-        'NK': 'NT',
-        'X-app-ver': '4.70.2.1',
-        'User-Agent': 'Mozilla/5.0 (compatible; Garmin Connect)',
-        'Origin': 'https://connect.garmin.com',
-        'Referer': 'https://connect.garmin.com/modern/workout/create/running',
+        'User-Agent': 'GCM-iOS-5.7.2.1',
+        'di-backend': 'connectapi.garmin.com',
       },
       body: JSON.stringify(workoutPayload),
     });
