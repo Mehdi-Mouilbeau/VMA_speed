@@ -117,11 +117,15 @@ export async function handler(event) {
     });
     const html2 = await step2.text();
 
+    // Detect rate-limiting (Garmin returns JSON with status-code 429)
+    if (html2.includes('"429"') || step2.status === 429) {
+      return { statusCode: 429, headers: CORS, body: JSON.stringify({ error: 'Trop de tentatives, réessayez dans 1 heure' }) };
+    }
+
     // Check page title = "Success"
     const titleMatch = html2.match(/<title>([^<]+)<\/title>/);
-    const pageTitle = titleMatch ? titleMatch[1].trim() : '(no title)';
     if (!titleMatch || !titleMatch[1].includes('Success')) {
-      return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'Identifiants incorrects', debug_title: pageTitle, debug_html: html2.slice(0, 600) }) };
+      return { statusCode: 403, headers: CORS, body: JSON.stringify({ error: 'Identifiants incorrects' }) };
     }
 
     // Extract ticket from HTML body (garth pattern: embed?ticket=...)
