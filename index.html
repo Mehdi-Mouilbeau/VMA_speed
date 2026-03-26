@@ -256,18 +256,45 @@
 
       <!-- State A: not connected -->
       <div id="garmin-state-a">
-        <div class="field" style="margin-bottom:10px">
-          <label for="garmin-email">Email</label>
-          <input type="text" id="garmin-email" placeholder="user@example.com">
+        <!-- Mode 1: email + password -->
+        <div id="garmin-mode-login">
+          <div class="field" style="margin-bottom:10px">
+            <label for="garmin-email">Email</label>
+            <input type="text" id="garmin-email" placeholder="user@example.com">
+          </div>
+          <div class="field" style="margin-bottom:10px">
+            <label for="garmin-password">Mot de passe</label>
+            <input type="password" id="garmin-password" placeholder="••••••••">
+          </div>
+          <button class="btn-garmin" id="btn-garmin-connect" onclick="garminConnect()">
+            Connecter mon compte Garmin
+          </button>
+          <div id="garmin-msg"></div>
+          <div style="margin-top:10px;text-align:center">
+            <button class="btn-garmin-secondary" onclick="garminShowTokenMode()">
+              Connexion bloquée ? Utiliser un token →
+            </button>
+          </div>
         </div>
-        <div class="field" style="margin-bottom:10px">
-          <label for="garmin-password">Mot de passe</label>
-          <input type="password" id="garmin-password" placeholder="••••••••">
+        <!-- Mode 2: paste token -->
+        <div id="garmin-mode-token" style="display:none">
+          <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">
+            Exécute ce script dans ton terminal, puis colle le token ici :
+          </p>
+          <code style="display:block;background:#f3f4f6;padding:8px;border-radius:6px;font-size:.8rem;margin-bottom:10px;word-break:break-all">
+            python3 get_garmin_token.py
+          </code>
+          <div class="field" style="margin-bottom:10px">
+            <label for="garmin-token-input">Token Garmin</label>
+            <input type="text" id="garmin-token-input" placeholder="Colle le token ici…">
+          </div>
+          <button class="btn-garmin" onclick="garminUseToken()">
+            Utiliser ce token
+          </button>
+          <div style="margin-top:8px">
+            <button class="btn-garmin-secondary" onclick="garminShowLoginMode()">← Retour</button>
+          </div>
         </div>
-        <button class="btn-garmin" id="btn-garmin-connect" onclick="garminConnect()">
-          Connecter mon compte Garmin
-        </button>
-        <div id="garmin-msg"></div>
       </div>
 
       <!-- State B: connected -->
@@ -774,6 +801,28 @@ function downloadBlob(blob, filename) {
   function garminShowState(state) {
     document.getElementById('garmin-state-a').style.display = state === 'a' ? '' : 'none';
     document.getElementById('garmin-state-b').style.display = state === 'b' ? '' : 'none';
+  }
+
+  function garminShowTokenMode() {
+    document.getElementById('garmin-mode-login').style.display = 'none';
+    document.getElementById('garmin-mode-token').style.display = '';
+  }
+
+  function garminShowLoginMode() {
+    document.getElementById('garmin-mode-token').style.display = 'none';
+    document.getElementById('garmin-mode-login').style.display = '';
+  }
+
+  function garminUseToken() {
+    const token = document.getElementById('garmin-token-input').value.trim();
+    if (!token) return;
+    // Token from garth expires in ~1h; store with 55min expiry to be safe
+    const expiresAt = Date.now() + 55 * 60 * 1000;
+    localStorage.setItem('garmin_access_token', token);
+    localStorage.setItem('garmin_expires_at', String(expiresAt));
+    localStorage.setItem('garmin_email', 'token manuel');
+    document.getElementById('garmin-connected-label').textContent = 'Connecté via token';
+    garminShowState('b');
   }
 
   function garminSetMsg(id, html) {
